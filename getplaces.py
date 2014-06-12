@@ -72,7 +72,6 @@ def try_parallel(location):
 				print 'Places ID already processed %s' % str(place['id'])
 				break
 			else:
-				place_ref_dict[str(place['id'])] = ''
 				place_list = []
 
 				if 'rating' in place.keys():
@@ -136,24 +135,22 @@ def try_parallel(location):
 				else:
 					place_list.append('')
 
-				print place_list
-				# writer.writerow(place_list)
+				# update our dict
+				place_ref_dict[str(place['id'])] = place_list
 
-	print place_ref_dict
-	# if num_times_executed == 100:
-		# print to file
+	# if it is the last url to process, dump in memory to file
+	if (len(place_ref_dict) == 20):
+		with open('data.csv','wb') as f1:
+			writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
+			writer.writerow(['rating','name','reference','price_level','lat','lon','opening_hours','vicinity','photos','id','types','icon'])
+			# loop through dict
+			for k, v in place_ref_dict.items():
+				writer.writerow(v)
 
 
-# count = 0
-# for l in location_list:
-# 	count = count+1
-# 	if (count < 100):
-# 		try_parallel(l, locations_length)
-location_list = location_list[:10]
-for i in range(len(location_list)):
-  try_parallel(location_list[i])
-	# if (i == len(locations_length -1)):
-	# 	print 'last element'
-
+# loop through each url and process
+location_list = location_list[:6]
+for l in location_list:
+		try_parallel(l)
 
 reactor.run()
