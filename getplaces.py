@@ -78,7 +78,18 @@ with open('data.csv','wb') as f1:
 		#          '&radius=%s&sensor=false&key=%s') % (TYPE, LOCATION, RADIUS, AUTH_KEY)
 
 		# Send the GET request to the Place details service (using url from above)
-		response = urllib2.urlopen(url)
+		attempt = 0
+		max_attempts = 5
+		while attempt < max_attempts:
+			try:
+				response = urllib2.urlopen(url)
+				attempt = max_attempts
+			except:
+				print 'Error, pausing then attempting retry'
+				time.sleep(5)
+				attempt += 1
+
+		
 
 		# Get the response and use the JSON library to decode the JSON
 		json_raw = response.read()
@@ -158,7 +169,8 @@ with open('data.csv','wb') as f1:
 		call_count += 1
 		average_time = total_time/call_count
 
-		print 'Call number: ', call_count
+		print 'Call number: ', call_count, ' took (s): ', cur_time
+		print 'Current number of unique items: ', len(place_ref_dict)
 		print 'Time remaining (s): ', average_time*(LAT_CALLS*LON_CALLS - call_count)
 		if call_count > CALL_COUNT_MAX:
 			print 'Call count too high: ', call_count
