@@ -43,33 +43,17 @@ for i in range(LAT_CALLS):
 		cur_str = '{:.6f},{:.6f}' .format(cur_lat,cur_lon)
 		location_list.append(cur_str)
 
-locations_length = len(location_list)
-print 'total number of locations to seach for %s' % locations_length
+MAX_LOCATIONS = len(location_list)
+retrieval_count = 0
+print 'total number of locations to seach for %s' % MAX_LOCATIONS
 
-@inlineCallbacks
-def try_parallel(location):
-	start_time = time.time()
-
-	#Key word search, for multiple 'coffee+cafe'
-	KEYWORD = 'coffee'
-	TYPE = 'cafe'
-
-	url =  ('https://maps.googleapis.com/maps/api/place/search/json?keyword=%s&location=%s'
-			         '&radius=%s&sensor=false&key=%s') % (KEYWORD, location, RADIUS, AUTH_KEY)
-	print 'Requesting from URL %s' % url
-	response = yield getPage(url)
-	# print response
-
-	place_ref_dict = {}
-
-	# Get the response and use the JSON library to decode the JSON
-	json_data = json.loads(response)
-
-	# Iterate through the results and print them to the console
+def parse_json_data(json_data, place_ref_dict):
 	if json_data['status'] == 'OK':
 		for place in json_data['results']:
-			if str(place['id']) in place_ref_dict.keys():
-				print 'Places ID already processed %s' % str(place['id'])
+			place_id = str(place['id'])
+			if place_id in place_ref_dict.keys():
+				print '#################################################'
+				print 'Places ID already processed %s' % place_id
 				break
 			else:
 				place_list = []
@@ -121,7 +105,7 @@ def try_parallel(location):
 					place_list.append('')
 
 				if 'id' in place.keys():
-					place_list.append(str(place['id']))
+					place_list.append(place_id)
 				else:
 					place_list.append('')
 
@@ -136,10 +120,34 @@ def try_parallel(location):
 					place_list.append('')
 
 				# update our dict
-				place_ref_dict[str(place['id'])] = place_list
+				place_ref_dict[place_id] = place_list
+
+@inlineCallbacks
+def try_parallel(location):
+	start_time = time.time()
+
+	#Key word search, for multiple 'coffee+cafe'
+	KEYWORD = 'coffee'
+	TYPE = 'cafe'
+
+	url =  ('https://maps.googleapis.com/maps/api/place/search/json?keyword=%s&location=%s'
+			         '&radius=%s&sensor=false&key=%s') % (KEYWORD, location, RADIUS, AUTH_KEY)
+	print 'Requesting from URL %s' % url
+	response = yield getPage(url)
+
+	# with each url request, increment counter so we know when we reach the end
+	global retrieval_count
+	retrieval_count = retrieval_count + 1
+	place_ref_dict = {}
+
+	# Get the response and use the JSON library to decode the JSON
+	json_data = json.loads(response)
+
+	# Iterate through the results and print them to the console
+	parse_json_data(json_data, place_ref_dict)
 
 	# if it is the last url to process, dump in memory to file
-	if (len(place_ref_dict) == 20):
+	if (retrieval_count == MAX_LOCATIONS):
 		with open('data.csv','wb') as f1:
 			writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
 			writer.writerow(['rating','name','reference','price_level','lat','lon','opening_hours','vicinity','photos','id','types','icon'])
