@@ -5,6 +5,7 @@ import csv
 import math
 import time
 import tqdm
+import urllib.request
 
 # Set the Places API key for your application
 AUTH_KEY = 'AIzaSyBvTCnjwofaUqzwma6gtWOyJIqTNOTStGg'
@@ -57,13 +58,15 @@ def got_result(future):
     loop.stop()
 
 def parse_json_data(json_data, place_ref_dict):
-    if json_data['status'] == 'OK':
+    if json_data['status'] == 'ZERO_RESULTS':
+        return ''
+    elif json_data['status'] == 'OK':
         for place in json_data['results']:
             place_id = str(place['id'])
             if place_id in place_ref_dict.keys():
                 print('#################################################')
                 print('Places ID already processed %s' % place_id)
-                break
+                return ''
             else:
                 place_list = []
 
@@ -141,32 +144,42 @@ def fetch_json(location):
     url =  ('https://maps.googleapis.com/maps/api/place/search/json?keyword=%s&location=%s'
                      '&radius=%s&sensor=false&key=%s') % (KEYWORD, location, RADIUS, AUTH_KEY)
     print('Requesting from URL %s' % url)
+    place_ref_dict = {}
 
     with (yield from sem):
-        response = yield from get(url, compress=True)
-        print(response)
+        try:
+            response = yield from get(url)
+        except Exception as exc:
+            print('...', url, 'has error', repr(str(exc)))
+            return ''
+        else:        
+            print(response)
+            str_response = response.decode('utf-8')
 
-        # Get the response and use the JSON library to decode the JSON
-        # json_data = json.loads(response)
+            # Get the response and use the JSON library to decode the JSON
+            json_data = json.loads(str_response)
 
-        # Iterate through the results and print them to the console
-        # parse_json_data(json_data, place_ref_dict)
-        return url
+            # Iterate through the results and print them to the console
+            return parse_json_data(json_data, place_ref_dict)
+        
 
 def init_file():
     with open('data.csv','wt') as f1:
         writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
         writer.writerow(['rating','name','reference','price_level','lat','lon','opening_hours','vicinity','photos','id','types','icon'])            
+        f1.close()
 
 def write_to_file(row):
     with open('data.csv','a') as f1:
         writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
-        writer.writerow(row)
+        if (row != ''):
+            writer.writerow(row)
+        f1.close()
 
 def main():
     init_file()
     locations = init_locations()
-    locations = locations[:5]
+    # locations = locations[:5]
     # loop = asyncio.get_event_loop()
 
     # single task with callback
@@ -177,7 +190,6 @@ def main():
     # list of tasks with callback
     coros = [fetch_json(location) for location in locations]
     for completed in asyncio.as_completed(coros):
-        print("testing")
         result = yield from completed
         write_to_file(result)    
 
