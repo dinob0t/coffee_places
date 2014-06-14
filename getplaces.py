@@ -4,12 +4,9 @@ import json
 import csv
 import math
 import time
-from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks
-from twisted.web.client import getPage
 
 # Set the Places API key for your application
-AUTH_KEY = 'AIzaSyBvTCnjwofaUqzwma6gtWOyJIqTNOTStGg'
+AUTH_KEY = 'AIzaSyB9F9VhZDwPctQnoPJdwH0xlIOVgtMdtIs'
 
 # Search bounds
 LAT_MAX = 40.885457
@@ -22,7 +19,7 @@ LAT_DEG_P_M = (40.727740 - 40.726840)/100
 LON_DEG_P_M = (-73.978720 - -73.979907 )/100
 
 # Define the radius (in meters) for the search
-RADIUS = 10000
+RADIUS = 100
 SPACING = 2*RADIUS/math.sqrt(2)
 
 LAT_STEP = SPACING*LAT_DEG_P_M
@@ -43,122 +40,138 @@ for i in range(LAT_CALLS):
 		cur_str = '{:.6f},{:.6f}' .format(cur_lat,cur_lon)
 		location_list.append(cur_str)
 
-MAX_LOCATIONS = len(location_list)
-retrieval_count = 0
-print 'total number of locations to seach for %s' % MAX_LOCATIONS
 
-def parse_json_data(json_data, place_ref_dict):
-	if json_data['status'] == 'OK':
-		for place in json_data['results']:
-			place_id = str(place['id'])
-			if place_id in place_ref_dict.keys():
-				print '#################################################'
-				print 'Places ID already processed %s' % place_id
-				break
-			else:
-				place_list = []
+CALL_COUNT_MAX = 50000
 
-				if 'rating' in place.keys():
-					place_list.append(str(place['rating']))
-				else:
-					place_list.append('')
 
-				if 'name' in place.keys():
-					place_list.append((place['name']).encode('utf8'))
-				else:
-					place_list.append('')
 
-				if 'reference' in place.keys():
-					place_list.append(str(place['reference']))
-				else:
-					place_list.append('')
+#Key word search, for multiple 'coffee+cafe'
+KEYWORD = 'coffee'
 
-				if 'price_level' in place.keys():
-					place_list.append(str(place['price_level']))
-				else:
-					place_list.append('')
+TYPE = 'cafe'
 
-				if 'geometry' in place.keys():
-					if 'location' in place['geometry'].keys():
-						place_list.append(str(place['geometry']['location']['lat']))
-						place_list.append(str(place['geometry']['location']['lng']))
+place_ref_dict = {}
+call_count = 0
+total_time = 0
+
+with open('data.csv','wb') as f1:
+	writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
+	writer.writerow(['rating','name','reference','price_level','lat','lon','opening_hours','vicinity','photos','id','types','icon'])
+
+	for LOCATION in location_list:
+		print 'Current location: ', LOCATION
+		start_time = time.time()
+
+		# Define the location coordinates
+		#LOCATION = '40.720815,-74.000675'
+		# Compose a URL to query a predefined location with a radius of 5000 meters
+		# Simple place search
+		# url = ('https://maps.googleapis.com/maps/api/place/search/json?location=%s'
+		#          '&radius=%s&sensor=false&key=%s') % (LOCATION, RADIUS, AUTH_KEY)
+
+		# With search term
+		url =  ('https://maps.googleapis.com/maps/api/place/search/json?keyword=%s&location=%s'
+		         '&radius=%s&sensor=false&key=%s') % (KEYWORD, LOCATION, RADIUS, AUTH_KEY)
+		#print url
+		# Search on type
+		# url =  ('https://maps.googleapis.com/maps/api/place/search/json?type=%slocation=%s'
+		#          '&radius=%s&sensor=false&key=%s') % (TYPE, LOCATION, RADIUS, AUTH_KEY)
+
+		# Send the GET request to the Place details service (using url from above)
+		attempt = 0
+		max_attempts = 5
+		while attempt < max_attempts:
+			try:
+				response = urllib2.urlopen(url)
+				attempt = max_attempts
+			except:
+				print 'Error, pausing then attempting retry'
+				time.sleep(5)
+				attempt += 1
+
+
+
+		# Get the response and use the JSON library to decode the JSON
+		json_raw = response.read()
+		json_data = json.loads(json_raw)
+
+		# Iterate through the results and print them to the console
+		if json_data['status'] == 'OK':
+			for place in json_data['results']:
+				if str(place['id']) not in place_ref_dict.keys():
+					place_ref_dict[str(place['id'])] = ''
+					place_list = []
+
+					if 'rating' in place.keys():
+						place_list.append(str(place['rating']))
+					else:
+						place_list.append('')
+
+					if 'name' in place.keys():
+						place_list.append((place['name']).encode('utf8'))
+					else:
+						place_list.append('')
+
+					if 'reference' in place.keys():
+						place_list.append(str(place['reference']))
+					else:
+						place_list.append('')
+
+					if 'price_level' in place.keys():
+						place_list.append(str(place['price_level']))
+					else:
+						place_list.append('')
+
+					if 'geometry' in place.keys():
+						if 'location' in place['geometry'].keys():
+							place_list.append(str(place['geometry']['location']['lat']))
+							place_list.append(str(place['geometry']['location']['lng']))
+						else:
+							place_list.append('')
+							place_list.append('')
 					else:
 						place_list.append('')
 						place_list.append('')
-				else:
-					place_list.append('')
-					place_list.append('')
 
-				if 'opening_hours' in place.keys():
-					place_list.append(str(place['opening_hours']))
-				else:
-					place_list.append('')
+					if 'opening_hours' in place.keys():
+						place_list.append(str(place['opening_hours']))
+					else:
+						place_list.append('')
 
-				if 'vicinity' in place.keys():
-					place_list.append(str(place['vicinity']))
-				else:
-					place_list.append('')
+					if 'vicinity' in place.keys():
+						place_list.append(str(place['vicinity']))
+					else:
+						place_list.append('')
 
-				if 'photos' in place.keys():
-					place_list.append(str(place['photos']))
-				else:
-					place_list.append('')
+					if 'photos' in place.keys():
+						place_list.append(str(place['photos']))
+					else:
+						place_list.append('')
 
-				if 'id' in place.keys():
-					place_list.append(place_id)
-				else:
-					place_list.append('')
+					if 'id' in place.keys():
+						place_list.append(str(place['id']))
+					else:
+						place_list.append('')
 
-				if 'types' in place.keys():
-					place_list.append(str(place['types']))
-				else:
-					place_list.append('')
+					if 'types' in place.keys():
+						place_list.append(str(place['types']))
+					else:
+						place_list.append('')
 
-				if 'icon' in place.keys():
-					place_list.append(str(place['icon']))
-				else:
-					place_list.append('')
+					if 'icon' in place.keys():
+						place_list.append(str(place['icon']))
+					else:
+						place_list.append('')
 
-				# update our dict
-				place_ref_dict[place_id] = place_list
+					writer.writerow(place_list)
+		cur_time = time.time() - start_time
+		total_time += cur_time
+		call_count += 1
+		average_time = total_time/call_count
 
-@inlineCallbacks
-def try_parallel(location):
-	start_time = time.time()
-
-	#Key word search, for multiple 'coffee+cafe'
-	KEYWORD = 'coffee'
-	TYPE = 'cafe'
-
-	url =  ('https://maps.googleapis.com/maps/api/place/search/json?keyword=%s&location=%s'
-			         '&radius=%s&sensor=false&key=%s') % (KEYWORD, location, RADIUS, AUTH_KEY)
-	print 'Requesting from URL %s' % url
-	response = yield getPage(url)
-
-	# with each url request, increment counter so we know when we reach the end
-	global retrieval_count
-	retrieval_count = retrieval_count + 1
-	place_ref_dict = {}
-
-	# Get the response and use the JSON library to decode the JSON
-	json_data = json.loads(response)
-
-	# Iterate through the results and print them to the console
-	parse_json_data(json_data, place_ref_dict)
-
-	# if it is the last url to process, dump in memory to file
-	if (retrieval_count == MAX_LOCATIONS):
-		with open('data.csv','wb') as f1:
-			writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
-			writer.writerow(['rating','name','reference','price_level','lat','lon','opening_hours','vicinity','photos','id','types','icon'])
-			# loop through dict
-			for k, v in place_ref_dict.items():
-				writer.writerow(v)
-
-
-# loop through each url and process
-location_list = location_list[:6]
-for l in location_list:
-		try_parallel(l)
-
-reactor.run()
+		print 'Call number: ', call_count, ' took (s): ', cur_time
+		print 'Current number of unique items: ', len(place_ref_dict)
+		print 'Time remaining (s): ', average_time*(LAT_CALLS*LON_CALLS - call_count)
+		if call_count > CALL_COUNT_MAX:
+			print 'Call count too high: ', call_count
+			break
