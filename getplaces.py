@@ -12,7 +12,7 @@ AUTH_KEY = 'AIzaSyB9F9VhZDwPctQnoPJdwH0xlIOVgtMdtIs'
 LAT_MAX = 40.885457
 LAT_MIN = 40.568874
 
-LON_MAX = -73.854017 
+LON_MAX = -73.854017
 LON_MIN = -74.036351
 
 LAT_DEG_P_M = (40.727740 - 40.726840)/100
@@ -89,7 +89,7 @@ with open('data.csv','wb') as f1:
 				time.sleep(5)
 				attempt += 1
 
-		
+
 
 		# Get the response and use the JSON library to decode the JSON
 		json_raw = response.read()
@@ -136,8 +136,8 @@ with open('data.csv','wb') as f1:
 					if 'opening_hours' in place.keys():
 						place_list.append(str(place['opening_hours']))
 					else:
-						place_list.append('')	
-					
+						place_list.append('')
+
 					if 'vicinity' in place.keys():
 						place_list.append(str(place['vicinity']))
 					else:
@@ -156,12 +156,12 @@ with open('data.csv','wb') as f1:
 					if 'types' in place.keys():
 						place_list.append(str(place['types']))
 					else:
-						place_list.append('')	
+						place_list.append('')
 
 					if 'icon' in place.keys():
 						place_list.append(str(place['icon']))
 					else:
-						place_list.append('')	
+						place_list.append('')
 
 					writer.writerow(place_list)
 		cur_time = time.time() - start_time
@@ -175,6 +175,3 @@ with open('data.csv','wb') as f1:
 		if call_count > CALL_COUNT_MAX:
 			print 'Call count too high: ', call_count
 			break
-
-
-
