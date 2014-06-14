@@ -30,7 +30,7 @@ LON_STEP = SPACING*LON_DEG_P_M
 LAT_CALLS = int(math.floor((LAT_MAX - LAT_MIN + LAT_STEP)/(LAT_STEP)))
 LON_CALLS = int(math.floor((LON_MAX - LON_MIN + LON_STEP)/(LON_STEP)))
 
-sem = asyncio.Semaphore(5)
+sem = asyncio.Semaphore(100)
 
 def init_locations():
     location_list = []
@@ -40,13 +40,13 @@ def init_locations():
             cur_lon = LON_MIN + j*LON_STEP
             cur_str = '{:.6f},{:.6f}' .format(cur_lat,cur_lon)
             location_list.append(cur_str)
+    print("total number of locations to query %d" % len(location_list))
     return location_list
 
 @asyncio.coroutine
 def get(*args, **kwargs):
     response = yield from aiohttp.request('GET', *args, **kwargs)
     return (yield from response.read_and_close(decode=True))
-
 
 @asyncio.coroutine
 def wait_with_progress(coros):
@@ -76,7 +76,7 @@ def parse_json_data(json_data, place_ref_dict):
                     place_list.append('')
 
                 if 'name' in place.keys():
-                    place_list.append((place['name']).encode('utf8'))
+                    place_list.append((place['name']))
                 else:
                     place_list.append('')
 
@@ -143,44 +143,98 @@ def fetch_json(location):
 
     url =  ('https://maps.googleapis.com/maps/api/place/search/json?keyword=%s&location=%s'
                      '&radius=%s&sensor=false&key=%s') % (KEYWORD, location, RADIUS, AUTH_KEY)
-    print('Requesting from URL %s' % url)
     place_ref_dict = {}
-
+    # yield from asyncio.sleep(1)
+    # yield from sem.acquire()
+    # yield from process_request(place_ref_dict, url)
+    # sem.release()
+    # task = asyncio.Task(process_request(url))
+    # task.add_done_callback(lambda t: sem.release())
     with (yield from sem):
+        print('## Processing:', url)
+
+        # def make_call():
+        #     attempt = 0
+        #     max_attempts = 5
+        #     while attempt < max_attempts:
+        #         try:
+        #             response = yield from get(url)
+        #             attempt = max_attempts
+        #         except Exception as exc:
+        #             print('...', url, 'has error', repr(str(exc)))
+        #             time.sleep(3)
+        #             attempt += 1
+        #         else:        
+        #             print(response.decode('utf-8'))
+        #             str_response = response.decode('utf-8')
+
+        #             # Get the response and use the JSON library to decode the JSON
+        #             json_data = json.loads(str_response)
+
+        #             # Iterate through the results and print them to the console
+        #             return parse_json_data(json_data, place_ref_dict)
+        #             # return  url
+
+        response = yield from process_request(place_ref_dict, url)
+        if (response == ''):
+            return ''
+
+        print(response)
+        # str_response = response.decode('utf-8')
+
+        # Get the response and use the JSON library to decode the JSON
+        json_data = json.loads(response)
+
+        # Iterate through the results and print them to the console
+        return parse_json_data(json_data, place_ref_dict)
+        # return  url
+
+@asyncio.coroutine     
+def process_request(place_ref_dict, url):
+    print('## Processing:', url)
+
+    attempt = 1
+    max_attempts = 5
+    while attempt <= max_attempts:
         try:
+            if (attempt > 1):
+                print("Attempt no %d" % attempt)
+                print("For url ", url)        
             response = yield from get(url)
+            attempt = max_attempts
         except Exception as exc:
             print('...', url, 'has error', repr(str(exc)))
-            return ''
-        else:        
-            print(response)
-            str_response = response.decode('utf-8')
-
-            # Get the response and use the JSON library to decode the JSON
-            json_data = json.loads(str_response)
-
-            # Iterate through the results and print them to the console
-            return parse_json_data(json_data, place_ref_dict)
-        
+            # time.sleep(3)
+            yield from asyncio.sleep(3)
+            attempt += 1
+        else: 
+            print("Response received:")    
+            return response.decode('utf-8')   
+    print("## WARNING given up on url: ", url)
+    return ''
 
 def init_file():
     with open('data.csv','wt') as f1:
         writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
         writer.writerow(['rating','name','reference','price_level','lat','lon','opening_hours','vicinity','photos','id','types','icon'])            
-        f1.close()
+        # f1.close()
 
-def write_to_file(row):
+def write_to_file(results):
     with open('data.csv','a') as f1:
         writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
-        if (row != ''):
-            writer.writerow(row)
-        f1.close()
+        # if (row != ''):
+            # writer.writerow(row)
+        # f1.close()
+        # loop through dict
+        for row in results:
+            if (row != '' or row != 'None'):
+                writer.writerow(row)
 
 def main():
+    start_time = time.time()        
     init_file()
     locations = init_locations()
-    # locations = locations[:5]
-    # loop = asyncio.get_event_loop()
+    # locations = locations[]
 
     # single task with callback
     # task = asyncio.async(fetch_json(locations[0]))
@@ -189,17 +243,24 @@ def main():
 
     # list of tasks with callback
     coros = [fetch_json(location) for location in locations]
-    for completed in asyncio.as_completed(coros):
-        result = yield from completed
-        write_to_file(result)    
+    # for completed in asyncio.as_completed(coros):
+        # result = yield from completed
+    # results, _ = yield from asyncio.wait(coros)
+    # results = [r.result() for r in results]
+    # print(results)
+    # write_to_file(results)   
+    results = []
+    for f in asyncio.as_completed(coros):
+        result = yield from f
+        if (result != ''):
+            print("#### up too %d" % len(results))           
+            results.append(result)
 
-            # results.append(result)
-    # f = wait_with_progress(fs)
-    # asyncio.as_completed(fs)
-    # task.add_done_callback(write_to_file)
-    # loop.run_until_complete(f)
-
-    # loop.close()
+    write_to_file(results)   
+    print(results)   
+    total_time = time.time() - start_time
+    print("Total numbe of api requests %d" % len(locations))
+    print("Total time taken to process api requests is %s seconds" % total_time) 
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
