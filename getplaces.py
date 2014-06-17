@@ -139,7 +139,7 @@ with open('data.csv','wb') as f1:
 						place_list.append('')
 
 					if 'vicinity' in place.keys():
-						place_list.append(str(place['vicinity']))
+						place_list.append((place['vicinity']).encode('utf8'))
 					else:
 						place_list.append('')
 
@@ -151,7 +151,7 @@ with open('data.csv','wb') as f1:
 					if 'id' in place.keys():
 						place_list.append(str(place['id']))
 					else:
-						place_list.append('')
+						place_list.append('')	
 
 					if 'types' in place.keys():
 						place_list.append(str(place['types']))
