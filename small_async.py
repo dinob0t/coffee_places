@@ -3,10 +3,11 @@ import aiohttp
 
 def main():
 	print("here")
-	# url = 'https://maps.googleapis.com/maps/api/place/search/json?keyword=coffee&location=40.642696,-73.930595&radius=100&sensor=false&key=AIzaSyBvTCnjwofaUqzwma6gtWOyJIqTNOTStGg'
-	url = 'https://yahoo.com'
-	for x in range(0,1000):
+	url = 'https://maps.googleapis.com/maps/api/place/search/json?keyword=coffee&location=40.642696,-73.930595&radius=100&sensor=false&key=AIzaSyBvTCnjwofaUqzwma6gtWOyJIqTNOTStGg'
+	# url = 'https://yahoo.com'
+	for x in range(0,300):
 		response = yield from aiohttp.request('GET', url)
+
 		if response.status == 200:
 			print("pass %d" % x)
 		else:
