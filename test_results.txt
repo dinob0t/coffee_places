@@ -1,4 +1,0 @@
-First run through:
-1368 unique results
-3380 sec run time
-20 concurrent connections

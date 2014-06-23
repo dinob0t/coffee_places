@@ -31,8 +31,8 @@ LON_STEP = SPACING*LON_DEG_P_M
 LAT_CALLS = int(math.floor((LAT_MAX - LAT_MIN + LAT_STEP)/(LAT_STEP)))
 LON_CALLS = int(math.floor((LON_MAX - LON_MIN + LON_STEP)/(LON_STEP)))
 
-sem = asyncio.Semaphore(20)
 place_ref_dict = {}
+errors_dict ={}
 
 def init_locations():
     location_list = []
@@ -45,223 +45,172 @@ def init_locations():
     logging.info("total number of locations to query %d" % len(location_list))
     return location_list
 
-@asyncio.coroutine
-def get(*args, **kwargs):
-    response = yield from aiohttp.request('GET', *args, **kwargs)
-    return (yield from response.read_and_close(decode=True))
+def init_urls_from_locations():
+  locations = init_locations()
+  KEYWORD = 'coffee'
+  TYPE = 'cafe'
 
-@asyncio.coroutine
-def wait_with_progress(coros):
-    for f in tqdm.tqdm(asyncio.as_completed(coros), total=len(coros)):
-        yield from f
-
-def parse_json_data(json_data):
-    if json_data['status'] == 'ZERO_RESULTS':
-        return ''
-    elif json_data['status'] == 'OK':
-        for place in json_data['results']:
-            if str(place['id']) in place_ref_dict.keys():
-                logging.error('#################################################')
-                logging.error("Places ID already processed %s" % str(place['id']))
-                return ''
-            else:
-                place_list = []
-
-                if 'rating' in place.keys():
-                    place_list.append(str(place['rating']))
-                else:
-                    place_list.append('')
-
-                if 'name' in place.keys():
-                    place_list.append((place['name']))
-                else:
-                    place_list.append('')
-
-                if 'reference' in place.keys():
-                    place_list.append(str(place['reference']))
-                else:
-                    place_list.append('')
-
-                if 'price_level' in place.keys():
-                    place_list.append(str(place['price_level']))
-                else:
-                    place_list.append('')
-
-                if 'geometry' in place.keys():
-                    if 'location' in place['geometry'].keys():
-                        place_list.append(str(place['geometry']['location']['lat']))
-                        place_list.append(str(place['geometry']['location']['lng']))
-                    else:
-                        place_list.append('')
-                        place_list.append('')
-                else:
-                    place_list.append('')
-                    place_list.append('')
-
-                if 'opening_hours' in place.keys():
-                    place_list.append(str(place['opening_hours']))
-                else:
-                    place_list.append('')
-
-                if 'vicinity' in place.keys():
-                    place_list.append(str(place['vicinity']))
-                else:
-                    place_list.append('')
-
-                if 'photos' in place.keys():
-                    place_list.append(str(place['photos']))
-                else:
-                    place_list.append('')
-
-                if 'id' in place.keys():
-                    place_list.append(str(place['id']))
-                else:
-                    place_list.append('')
-
-                if 'types' in place.keys():
-                    place_list.append(str(place['types']))
-                else:
-                    place_list.append('')
-
-                if 'icon' in place.keys():
-                    place_list.append(str(place['icon']))
-                else:
-                    place_list.append('')
-
-                # update our dict
-                global place_ref_dict
-                place_ref_dict[str(place['id'])] = place_list
-                return place_list
-
-@asyncio.coroutine
-def fetch_json(location):
-    #Key word search, for multiple 'coffee+cafe'
-    KEYWORD = 'coffee'
-    TYPE = 'cafe'
-
+  urls = []
+  for location in locations:
     url =  ('https://maps.googleapis.com/maps/api/place/search/json?keyword=%s&location=%s'
                      '&radius=%s&sensor=false&key=%s') % (KEYWORD, location, RADIUS, AUTH_KEY)
-    # yield from asyncio.sleep(1)
-    # yield from sem.acquire()
-    # yield from process_request(place_ref_dict, url)
-    # sem.release()
-    # task = asyncio.Task(process_request(url))
-    # task.add_done_callback(lambda t: sem.release())
-    with (yield from sem):
-        logging.info("## Processing: %s" % url)
+    urls.append(url)
 
-        # def make_call():
-        #     attempt = 0
-        #     max_attempts = 5
-        #     while attempt < max_attempts:
-        #         try:
-        #             response = yield from get(url)
-        #             attempt = max_attempts
-        #         except Exception as exc:
-        #             print('...', url, 'has error', repr(str(exc)))
-        #             time.sleep(3)
-        #             attempt += 1
-        #         else:
-        #             print(response.decode('utf-8'))
-        #             str_response = response.decode('utf-8')
+  return urls
 
-        #             # Get the response and use the JSON library to decode the JSON
-        #             json_data = json.loads(str_response)
+def write_to_file():
+  with open('data.csv','wt') as f1:
+    writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
+    writer.writerow(['rating','name','reference','price_level','lat','lon','opening_hours','vicinity','photos','id','types','icon'])
+    # dump data from dict
+    print("Total number of records %d" % len(place_ref_dict))
+    for k,row in place_ref_dict.items():
+      if (row != '' or row != 'None'):
+          writer.writerow(row)
 
-        #             # Iterate through the results and print them to the console
-        #             return parse_json_data(json_data, place_ref_dict)
-        #             # return  url
-
-        response = yield from process_request(url)
-        if (response == ''):
-            return ''
-
-        logging.info(response)
-        # str_response = response.decode('utf-8')
-
-        # Get the response and use the JSON library to decode the JSON
-        json_data = json.loads(response)
-
-        # Iterate through the results and print them to the console
-        return parse_json_data(json_data)
-        # return  url
+def write_errors_to_file():
+  with open('errors.csv','wt') as f1:
+    writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
+    writer.writerow(['id', 'error'])
+    # dump data from dict
+    print("Total number of duplicates recorded %d" % len(errors_dict))
+    for k,row in errors_dict.items():
+      if (row != '' or row != 'None'):
+          writer.writerow(row)
 
 @asyncio.coroutine
-def process_request(url):
-    logging.info("## Processing: %s" % url)
+def parse_json_data(json_data):
+  if json_data['status'] == 'OK':
+    for place in json_data['results']:
+      if str(place['id']) in place_ref_dict.keys():
+        global errors_dict
+        errors_dict[str(place['id'])] = 'ERROR'
+        logging.error('#################################################')
+        logging.error("Places ID already processed %s" % str(place['id']))
+      else:
+        place_list = []
 
-    attempt = 1
-    max_attempts = 5
-    while attempt <= max_attempts:
-        try:
-            if (attempt > 1):
-                logging.warning("Attempt no %d" % attempt)
-                logging.warning("For url " + url)
-            response = yield from get(url)
-            attempt = max_attempts
-        except Exception as exc:
-            # logging.error(exc)
-            logging.error("ERROR!! %s has error %s" % url, repr(str(exc)))
-            # time.sleep(3)
-            yield from asyncio.sleep(3)
-            attempt += 1
+        if 'rating' in place.keys():
+            place_list.append(str(place['rating']))
         else:
-            logging.info("Response received:")
-            return response.decode('utf-8')
-    # logging.error("## WARNING given up on url: " + url)
-    return ''
+            place_list.append('')
 
-def init_file():
-    with open('data.csv','wt') as f1:
-        writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
-        writer.writerow(['rating','name','reference','price_level','lat','lon','opening_hours','vicinity','photos','id','types','icon'])
-        # f1.close()
+        if 'name' in place.keys():
+            place_list.append((place['name']))
+        else:
+            place_list.append('')
 
-def write_to_file(results):
-    with open('data.csv','a') as f1:
-        writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
-        # if (row != ''):
-            # writer.writerow(row)
-        # f1.close()
-        # loop through dict
-        for row in results:
-            if (row != '' or row != 'None'):
-                writer.writerow(row)
+        if 'reference' in place.keys():
+            place_list.append(str(place['reference']))
+        else:
+            place_list.append('')
 
-def main():
-    logging.basicConfig(filename='async_places.log',level=logging.INFO)
-    logging.info('Started')
+        if 'price_level' in place.keys():
+            place_list.append(str(place['price_level']))
+        else:
+            place_list.append('')
 
-    start_time = time.time()
-    init_file()
-    locations = init_locations()
-    # locations = locations[]
+        if 'geometry' in place.keys():
+            if 'location' in place['geometry'].keys():
+                place_list.append(str(place['geometry']['location']['lat']))
+                place_list.append(str(place['geometry']['location']['lng']))
+            else:
+                place_list.append('')
+                place_list.append('')
+        else:
+            place_list.append('')
+            place_list.append('')
 
-    # single task with callback
-    # task = asyncio.async(fetch_json(locations[0]))
-    # task.add_done_callback(write_to_file)
-    # loop.run_until_complete(task)
+        if 'opening_hours' in place.keys():
+            place_list.append(str(place['opening_hours']))
+        else:
+            place_list.append('')
 
-    # list of tasks with callback
-    coros = [fetch_json(location) for location in locations]
-    # for completed in asyncio.as_completed(coros):
-        # result = yield from completed
-    # results, _ = yield from asyncio.wait(coros)
-    # results = [r.result() for r in results]
-    # print(results)
-    # write_to_file(results)
-    results = []
-    for f in asyncio.as_completed(coros):
-        result = yield from f
-        if (result != ''):
-            logging.info("#### up too %d" % len(results))
-            results.append(result)
+        if 'vicinity' in place.keys():
+            place_list.append(str(place['vicinity']))
+        else:
+            place_list.append('')
 
-    write_to_file(results)
-    total_time = time.time() - start_time
-    logging.info("Total numbe of api requests %d" % len(locations))
-    logging.info("Total time taken to process api requests is %s seconds" % total_time)
+        if 'photos' in place.keys():
+            place_list.append(str(place['photos']))
+        else:
+            place_list.append('')
+
+        if 'id' in place.keys():
+            place_list.append(str(place['id']))
+        else:
+            place_list.append('')
+
+        if 'types' in place.keys():
+            place_list.append(str(place['types']))
+        else:
+            place_list.append('')
+
+        if 'icon' in place.keys():
+            place_list.append(str(place['icon']))
+        else:
+            place_list.append('')
+
+        # update our dict
+        global place_ref_dict
+        place_ref_dict[str(place['id'])] = place_list
+        print(place_list)
+
+@asyncio.coroutine
+def fetch(url):
+  data = ""
+  try:
+    yield from asyncio.sleep(1)
+    response = yield from aiohttp.request('GET', url, connector=connector)
+  except Exception as exc:
+      print("ERROR ", url, 'has error', repr(str(exc)))
+  else:
+      data = (yield from response.read()).decode('utf-8', 'replace')
+      response.close()
+
+  return data
+
+@asyncio.coroutine
+def print_page(url, idx):
+    print("fetching page with idx %d", idx)
+    page = yield from fetch(url)
+    print("got page with idx %d", idx)
+
+    # Get the response and use the JSON library to decode the JSON
+    json_data = json.loads(page)
+    # Iterate through the results and print them to the console
+    yield from parse_json_data(json_data)
+
+@asyncio.coroutine
+def process_batch_of_urls(round, urls):
+  print("Batch %d starting" % round)
+  coros = []
+  for idx, url in enumerate(urls):
+    coros.append(asyncio.Task(print_page(url, idx)))
+
+  yield from asyncio.gather(*coros)
+  print("Round %d finished" % round)
+
+@asyncio.coroutine
+def process_all():
+  logging.info('### Started ###')
+  start_time = time.time()
+  urls = init_urls_from_locations()
+
+  chunks=[urls[x:x+100] for x in range(0, len(urls), 100)]
+  print("Total number of batches %d" % len(chunks))
+
+  for idx, batch in enumerate(chunks):
+    yield from process_batch_of_urls(idx, batch)
+
+  write_to_file()
+  write_errors_to_file()
+  total_time = time.time() - start_time
+  print("Total number of api requests %d" % len(urls))
+  print("Total time taken to process api requests is %s seconds" % total_time)
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    # connector stores cookies between requests and uses connection pool
+    connector = aiohttp.TCPConnector(share_cookies=True, loop=loop)
+    loop.run_until_complete(process_all())
