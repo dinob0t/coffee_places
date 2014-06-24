@@ -4,7 +4,6 @@ import json
 import csv
 import math
 import time
-import tqdm
 import urllib.request
 import logging
 
@@ -12,12 +11,38 @@ import logging
 AUTH_KEY = 'AIzaSyBvTCnjwofaUqzwma6gtWOyJIqTNOTStGg'
 
 # Search bounds
+# Original Manhattan and Brooklyn bounds
+# LAT_MAX = 40.885457
+# LAT_MIN = 40.568874
+
+# LON_MAX = -73.854017
+# LON_MIN = -74.036351
+
+json_data = open('nyc.json')
+nyc_all = json.load(json_data)
+json_data.close()
+
 LAT_MAX = 40.885457
 LAT_MIN = 40.568874
 
 LON_MAX = -73.854017
 LON_MIN = -74.036351
 
+for feature in nyc_all['features']:
+  cur_poly = feature['geometry']['coordinates'][0]
+  for point in cur_poly:
+    if point[0] < LON_MIN:
+      LON_MIN = point[0]
+    if point[0] > LON_MAX:
+      LON_MAX = point[0]
+    if point[1] < LAT_MIN:
+      LAT_MIN = point[1]
+    if point[1] > LAT_MAX:
+      LAT_MAX = point[1]    
+
+print ('Bounds are:', LAT_MIN, LAT_MAX, LON_MIN, LON_MAX)
+
+# Rough translation of degrees to meters f
 LAT_DEG_P_M = (40.727740 - 40.726840)/100
 LON_DEG_P_M = (-73.978720 - -73.979907 )/100
 
@@ -34,21 +59,52 @@ LON_CALLS = int(math.floor((LON_MAX - LON_MIN + LON_STEP)/(LON_STEP)))
 place_ref_dict = {}
 errors_dict ={}
 
+# Check if points lie within a polygon
+def point_in_poly(x,y,poly):
+
+    n = len(poly)
+    inside = False
+
+    p1x,p1y = poly[0]
+    for i in range(n+1):
+        p2x,p2y = poly[i % n]
+        if y > min(p1y,p2y):
+            if y <= max(p1y,p2y):
+                if x <= max(p1x,p2x):
+                    if p1y != p2y:
+                        xints = (y-p1y)*(p2x-p1x)/(p2y-p1y)+p1x
+                    if p1x == p2x or x <= xints:
+                        inside = not inside
+        p1x,p1y = p2x,p2y
+
+    return inside
+
 def init_locations():
-    location_list = []
-    for i in range(LAT_CALLS):
-        cur_lat = LAT_MIN + i*LAT_STEP
-        for j in range(LON_CALLS):
-            cur_lon = LON_MIN + j*LON_STEP
+
+  test_poly = [(0,0)]
+  location_list = []
+  for i in range(LAT_CALLS):
+      cur_lat = LAT_MIN + i*LAT_STEP
+      for j in range(LON_CALLS):
+          cur_lon = LON_MIN + j*LON_STEP
+          if point_in_poly(cur_lon,cur_lat,test_poly):
             cur_str = '{:.6f},{:.6f}' .format(cur_lat,cur_lon)
             location_list.append(cur_str)
-    logging.info("total number of locations to query %d" % len(location_list))
-    return location_list
+          else:
+            for feature in nyc_all['features']:
+                  cur_poly = feature['geometry']['coordinates'][0]
+                  test_poly = [tuple(l) for l in cur_poly]
+                  if point_in_poly(cur_lon,cur_lat,test_poly):
+                      cur_str = '{:.6f},{:.6f}' .format(cur_lat,cur_lon)
+                      location_list.append(cur_str)
+                      break        
+  logging.info("total number of locations to query %d" % len(location_list))
+  return location_list
 
 def init_urls_from_locations():
   locations = init_locations()
   KEYWORD = 'coffee'
-  TYPE = 'cafe'
+  #TYPE = 'cafe'
 
   urls = []
   for location in locations:
@@ -59,7 +115,7 @@ def init_urls_from_locations():
   return urls
 
 def write_to_file():
-  with open('data.csv','wt') as f1:
+  with open('data_async.csv','wt') as f1:
     writer=csv.writer(f1, delimiter=',',lineterminator='\n',)
     writer.writerow(['rating','name','reference','price_level','lat','lon','opening_hours','vicinity','photos','id','types','icon'])
     # dump data from dict
